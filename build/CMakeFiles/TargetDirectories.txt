@@ -1,0 +1,3 @@
+/home/az58999/convertool_2/build/CMakeFiles/rebuild_cache.dir
+/home/az58999/convertool_2/build/CMakeFiles/edit_cache.dir
+/home/az58999/convertool_2/build/CMakeFiles/Convertool.dir

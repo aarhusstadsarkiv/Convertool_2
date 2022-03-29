@@ -1,0 +1,1 @@
+// This file will include functions used on an ArchiveFile object.

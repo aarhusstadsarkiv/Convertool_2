@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/Convertool.dir/main.c.o CMakeFiles/Convertool.dir/convert.c.o CMakeFiles/Convertool.dir/ArchiveFile/ArchiveFile.c.o CMakeFiles/Convertool.dir/pdf_converter/pdf_converter.c.o CMakeFiles/Convertool.dir/lib/paths/paths.c.o  -o Convertool  /usr/lib/x86_64-linux-gnu/libsqlite3.so 
