@@ -5,6 +5,7 @@
 #include "lib/paths/paths.h"
 #include "pdf_converter/pdf_converter.h"
 
+// Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
 
@@ -13,10 +14,8 @@ void format_string(char * file_path){
     for (size_t x = 0; x < file_path_length; x++)
         {
             if(file_path[x] == '\\'){
-                //printf("Found");
                  file_path[x] = '/';
             }   
-               
         }
 }
 int convert(ConvertArgs *args){
@@ -24,6 +23,10 @@ int convert(ConvertArgs *args){
     //printf("Map 0 puid: %s\n", args->convertermaps[0].puid);
     //printf("Map 0 converter: %s\n", args->convertermaps[0].converter);
     char file_path_buffer[300];
+    char log_file_path[300];
+    sprintf(log_file_path, "%s/log.txt", args->outdir);
+
+    FILE *fp = fopen(log_file_path, "w");
     
     size_t root_data_path_length = strlen(args->root_data_path);
 
@@ -37,38 +40,51 @@ int convert(ConvertArgs *args){
 
 
     args->files = malloc(sizeof(ArchiveFile)*args->file_count);
-    char * query = "SELECT * FROM Files WHERE Files.uuid not in (Select uuid From _ConvertedFiles) AND Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
-    char * query2 = "SELECT * FROM Files WHERE Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
-    get_archivefile_entries(db, args->files, args->file_count, query2);
+    char * query_get_non_converted_pdfs = "SELECT * FROM Files WHERE Files.uuid not in (Select uuid From _ConvertedFiles)"
+                    " AND Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
 
+    char * query_get_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
+    
+    get_archivefile_entries(db, args->files, args->file_count, query_get_pdfs);
+    
     sqlite3_close(db);
+
+    printf("Finished parsing all the archive files. Starting conversion to PDFA.\n");
+    
+    int count = 0;
 
     for (size_t i = 0; i < args->file_count; i++)
     {
-        //printf("%s\n", args->files[i].relative_path);
+        // Clear the file_path_buffer.
         memset(file_path_buffer, 0, strlen(file_path_buffer));
+        
+        // Create the path root + relative_path.
         insert_combined_path(file_path_buffer, args->root_data_path, args->files[i].relative_path);
-        //printf("%s\n", file_path_buffer);
+        
+        // Create output dir.
         char out_dir[300];
-        strcpy(out_dir, args->outdir);
         char folder[10];
-        sprintf(folder, "/%ld/", i);
+        strcpy(out_dir, args->outdir);
+        snprintf(folder, 10, "/%ld/", i);
         strcat(out_dir, folder);
-        //printf("Outdir: %s\n", out_dir);
         mkdir(out_dir, 0777);
         
-        
+        // Format the file_path and run conversion.
         format_string(args->files[i].relative_path);
         convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
         
+        // Log to the file.
+        fprintf(fp, "%s\n", args->files[i].uuid); 
+        count++;
+        if((count % 1000) == 0){
+            printf("Converted %d files.\n", &count);    
+        }
     }
 
-    return 0;
-    
-    
+    fclose(fp);
+    free(args->files);
 
-    
-    
+    return 0;
     
 }
 
@@ -98,8 +114,12 @@ int convert(ConvertArgs *args){
             sqlite3_finalize(stmt);
             return 1;
         }
+
+        // TODO: Move this block of code to a seperate function.
         memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
         memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
+        
+        /* Not currently used.
         memcpy(file->checksum,  sqlite3_column_text(stmt, 3), sizeof(file->checksum));
         memcpy(file->puid, sqlite3_column_text(stmt, 4), sizeof(file->puid));
         memcpy(file->signature, sqlite3_column_text(stmt, 5), sizeof(file->signature));
@@ -107,7 +127,9 @@ int convert(ConvertArgs *args){
         file->file_size_in_bytes = sqlite3_column_int(stmt, 7);
         if( sqlite3_column_text(stmt, 8) != NULL)
             memcpy(file->warning, sqlite3_column_text(stmt, 8), sizeof(file->warning));
+        */
     } 
+    
 
     while (i < max);
 
