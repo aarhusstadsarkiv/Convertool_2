@@ -40,12 +40,12 @@ int convert(ConvertArgs *args){
 
 
     args->files = malloc(sizeof(ArchiveFile)*args->file_count);
-    char * query_get_non_converted_pdfs = "SELECT * FROM Files WHERE Files.uuid not in (Select uuid From _ConvertedFiles)"
-                    " AND Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
+    char * query_get_non_converted_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', 'fmt/276', 'fmt/19', 'fmt/20')"
+                                            " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
 
     char * query_get_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
     
-    get_archivefile_entries(db, args->files, args->file_count, query_get_pdfs);
+    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_pdfs);
     
     sqlite3_close(db);
 
@@ -53,31 +53,56 @@ int convert(ConvertArgs *args){
     
     int count = 0;
 
+    // Buffers
+    char out_dir[300];
+    char destination_folder[200];
+
+
     for (size_t i = 0; i < args->file_count; i++)
     {
         // Clear the file_path_buffer.
         memset(file_path_buffer, 0, strlen(file_path_buffer));
         
+        memset(out_dir, 0, 300);
+        memset(destination_folder, 0, 200);
+
         // Create the path root + relative_path.
         insert_combined_path(file_path_buffer, args->root_data_path, args->files[i].relative_path);
-        
-        // Create output dir.
-        char out_dir[300];
-        char folder[10];
-        strcpy(out_dir, args->outdir);
-        snprintf(folder, 10, "/%ld/", i);
-        strcat(out_dir, folder);
-        mkdir(out_dir, 0777);
-        
-        // Format the file_path and run conversion.
+       
+        /* 
+            Format the file_path and get the destination folder.
+            Destination folder is equal to the parent of the relative path.
+        */
+
         format_string(args->files[i].relative_path);
+        size_t relative_path_length = strlen(args->files[i].relative_path);
+
+        if(relative_path_length < 5){
+            printf(" No more files to convert\n");
+            exit(1);
+        }
+
+        get_parent_path(destination_folder, args->files[i].relative_path,
+                        relative_path_length);
+
+        
+        strcpy(out_dir, args->outdir);
+        strcat(out_dir, destination_folder);
+
+        make_output_dir(out_dir);
+        
+        //printf("root: %s. relative_path: %s\n", args->root_data_path, args->files[i].relative_path);
+        //char *input_file = get_combined_path(args->root_data_path, args->files[i].relative_path);
+        //printf("Input file path: %s\n", input_file);
+        //free(input_file);
+        //printf("Destination folder: %s\n", out_dir);
         convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
         
         // Log to the file.
         fprintf(fp, "%s\n", args->files[i].uuid); 
         count++;
-        if((count % 1000) == 0){
-            printf("Converted %d files.\n", &count);    
+        if((count % 100) == 0){
+            printf("Converted %d files.\n", count);    
         }
     }
 
@@ -85,7 +110,6 @@ int convert(ConvertArgs *args){
     free(args->files);
 
     return 0;
-    
 }
 
    int get_archivefile_entries(sqlite3 *db, ArchiveFile *files, int max, char sql_query []) {
@@ -116,9 +140,16 @@ int convert(ConvertArgs *args){
         }
 
         // TODO: Move this block of code to a seperate function.
-        memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
-        memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
+        //memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
+        //memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
+        strcpy(file->uuid, sqlite3_column_text(stmt, 1));
+        if(strcmp(file->uuid, "234b19fe-ecfe-457e-ad5f-9f646b1fe735") == 0){
+            printf("Found the file %s\n", sqlite3_column_text(stmt, 2));
+
+        }
+        strcpy(file->relative_path, sqlite3_column_text(stmt, 2));
         
+
         /* Not currently used.
         memcpy(file->checksum,  sqlite3_column_text(stmt, 3), sizeof(file->checksum));
         memcpy(file->puid, sqlite3_column_text(stmt, 4), sizeof(file->puid));

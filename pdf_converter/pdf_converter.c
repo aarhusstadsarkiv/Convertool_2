@@ -11,7 +11,7 @@ void build_command(char cmd[], char *base_cmd[], char output_file_argument[], ch
     // Append base options.
     for (size_t i = 0; i < 6; i++)
     {
-    strcat(cmd, base_cmd[i]);  
+        strcat(cmd, base_cmd[i]);  
     }
 
     
@@ -22,7 +22,8 @@ void build_command(char cmd[], char *base_cmd[], char output_file_argument[], ch
     strcat(cmd, file_path);
 
     strcat(cmd, "\" ");
-    strcat(cmd, "> /dev/null");
+    // Redirect output and stderr (2 is the file descriptor for stderr).
+    strcat(cmd, "> /dev/null 2>/dev/null");
 }
 
 

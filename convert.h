@@ -9,8 +9,8 @@ typedef struct ConvertArgs{
     ConverterMap *convertermaps;
     char *db_path;
     char *outdir;
+    char *root_data_path;
     const int max_errs;
-    char root_data_path[200];
 } ConvertArgs;
 
 int get_archivefile_entries(sqlite3 *db, ArchiveFile *files, int max, char* sql_query);
