@@ -4,7 +4,7 @@ project(Convertool)
 
 
 # add the executable
-add_executable(Convertool main.c convert.c ArchiveFile/ArchiveFile.c pdf_converter/pdf_converter.c lib/paths/paths.c lib/paths/paths.h)
+add_executable(Convertool main.c convert.c ArchiveFile/ArchiveFile.c pdf_converter/pdf_converter.c libre_converter/libre_converter.c lib/paths/paths.c lib/paths/paths.h)
 
 find_package (SQLite3  REQUIRED)
 find_package(Threads REQUIRED)

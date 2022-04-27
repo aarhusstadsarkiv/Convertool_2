@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lib/paths/paths.h"
 #include "pdf_converter/pdf_converter.h"
+#include "libre_converter/libre_converter.h"
 
 // Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
@@ -44,8 +45,12 @@ int convert(ConvertArgs *args){
                                             " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
 
     char * query_get_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
+
+    char * query_get_non_converted_word_files = "SELECT * FROM Files WHERE Files.puid in ('fmt/40', 'fmt/412')"
+                                            " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
     
-    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_pdfs);
+    
+    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_word_files);
     
     sqlite3_close(db);
 
@@ -89,19 +94,22 @@ int convert(ConvertArgs *args){
         strcpy(out_dir, args->outdir);
         strcat(out_dir, destination_folder);
 
-        make_output_dir(out_dir);
+        // make_output_dir(out_dir);
         
         //printf("root: %s. relative_path: %s\n", args->root_data_path, args->files[i].relative_path);
         //char *input_file = get_combined_path(args->root_data_path, args->files[i].relative_path);
         //printf("Input file path: %s\n", input_file);
         //free(input_file);
         //printf("Destination folder: %s\n", out_dir);
-        convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
+        
+        //convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
+        enum FORMAT format = pdf;
+        libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, format);
         
         // Log to the file.
         fprintf(fp, "%s\n", args->files[i].uuid); 
         count++;
-        if((count % 100) == 0){
+        if((count % 500) == 0){
             printf("Converted %d files.\n", count);    
         }
     }

@@ -16,7 +16,7 @@ int main(int argc, const char *argv[])
     strcpy(maps[0].puid, "fmt/45");
     strcpy(maps[0].converter, "libre");
     */
-    ConvertArgs args = {.db_path=db_path, .file_count=70000, .max_errs=100, .outdir=outdir,
+    ConvertArgs args = {.db_path=db_path, .file_count=120000, .max_errs=100, .outdir=outdir,
                         .root_data_path=root_path};
     
     convert(&args);
