@@ -21,8 +21,6 @@ void format_string(char * file_path){
 }
 int convert(ConvertArgs *args){
     
-    //printf("Map 0 puid: %s\n", args->convertermaps[0].puid);
-    //printf("Map 0 converter: %s\n", args->convertermaps[0].converter);
     char file_path_buffer[300];
     char log_file_path[300];
     sprintf(log_file_path, "%s/log.txt", args->outdir);
@@ -39,6 +37,21 @@ int convert(ConvertArgs *args){
       return(0);
     }
 
+    // pdf_puids
+    char *pdf_puids[] = {"fmt/16", "fmt/17", "fmt/18", "fmt/276", "fmt/19", "fmt/20"};
+
+    // libre_puids
+    char *libre_puids[] = {
+                            "fmt/40", "fmt/412", "fmt/61", "fmt/214",
+                            "fmt/126", "fmt/609", "fmt/215", "fmt/39", "fmt/445"
+                        };
+
+    // excel puids
+    char *excel_puids[] = {"fmt/214", "fmt/445"};
+
+    size_t pdf_puids_length = sizeof(pdf_puids) / sizeof(char *);
+    size_t libre_puids_length = sizeof(libre_puids) / sizeof(char *);
+    size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
 
     args->files = malloc(sizeof(ArchiveFile)*args->file_count);
     char * query_get_non_converted_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', 'fmt/276', 'fmt/19', 'fmt/20')"
@@ -49,8 +62,12 @@ int convert(ConvertArgs *args){
     char * query_get_non_converted_word_files = "SELECT * FROM Files WHERE Files.puid in ('fmt/40', 'fmt/412')"
                                             " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
     
-    
-    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_word_files);
+    char * query_get_non_converted_files =  "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', "
+                                            "'fmt/276', 'fmt/19', 'fmt/20', 'fmt/40', 'fmt/412', 'fmt/61', 'fmt/214', "
+                                            "'fmt/126', 'fmt/609', 'fmt/215', 'fmt/39', 'fmt/445')"
+                                            " AND Files.uuid not in (SELECT uuid FROM _ConvertedFiles);";
+
+    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_files);
     
     sqlite3_close(db);
 
@@ -94,17 +111,20 @@ int convert(ConvertArgs *args){
         strcpy(out_dir, args->outdir);
         strcat(out_dir, destination_folder);
 
-        // make_output_dir(out_dir);
+        make_output_dir(out_dir);
         
-        //printf("root: %s. relative_path: %s\n", args->root_data_path, args->files[i].relative_path);
-        //char *input_file = get_combined_path(args->root_data_path, args->files[i].relative_path);
-        //printf("Input file path: %s\n", input_file);
-        //free(input_file);
-        //printf("Destination folder: %s\n", out_dir);
+        char * puid = args->files[i].puid;
         
-        //convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
-        enum FORMAT format = pdf;
-        libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, format);
+        if(compare_puids(puid, pdf_puids, pdf_puids_length))
+            convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
+        
+        else if(compare_puids(puid, libre_puids, libre_puids_length)){
+            libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_PDF);
+
+            // If the file is also an excel file, we convert it to ods alongside the generated pdf.
+            if(compare_puids(puid, excel_puids, excel_puids_length))
+                libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_ODS);
+        }
         
         // Log to the file.
         fprintf(fp, "%s\n", args->files[i].uuid); 
@@ -150,17 +170,14 @@ int convert(ConvertArgs *args){
         // TODO: Move this block of code to a seperate function.
         //memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
         //memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
+        
         strcpy(file->uuid, sqlite3_column_text(stmt, 1));
-        if(strcmp(file->uuid, "234b19fe-ecfe-457e-ad5f-9f646b1fe735") == 0){
-            printf("Found the file %s\n", sqlite3_column_text(stmt, 2));
-
-        }
         strcpy(file->relative_path, sqlite3_column_text(stmt, 2));
+        strcpy(file->puid, sqlite3_column_text(stmt, 4));
         
 
         /* Not currently used.
         memcpy(file->checksum,  sqlite3_column_text(stmt, 3), sizeof(file->checksum));
-        memcpy(file->puid, sqlite3_column_text(stmt, 4), sizeof(file->puid));
         memcpy(file->signature, sqlite3_column_text(stmt, 5), sizeof(file->signature));
         file->is_binary = sqlite3_column_int(stmt, 6);
         file->file_size_in_bytes = sqlite3_column_int(stmt, 7);
@@ -233,4 +250,16 @@ void dealloc_uuids(char ** uuids, int row_count){
     }
     free(uuids);
 }
-   
+
+
+int compare_puids(char *puid, char *puids[], size_t puids_length){
+    for (size_t i = 0; i < puids_length; i++)
+    {
+        if(strcmp(puid, puids[i]) == 0)
+            return 1;
+    }
+
+    // If the puid is not in the array, we return false.
+    return 0;
+    
+}
