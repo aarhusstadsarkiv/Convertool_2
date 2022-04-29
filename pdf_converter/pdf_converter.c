@@ -9,7 +9,7 @@ void convert_to_pdf_a(char* file, char* outdir, char* root_path){
     char * file_path = get_combined_path(root_path, file);
 
     char cmd[1000];
-    snprintf(cmd, 1000, "gs -dBATCH -dNOPAUSE -dPDFA=3 dPDFACompatibilityPolicy=1 -sDEVICE=pdfwrite" 
+    snprintf(cmd, 1000, "gs -dBATCH -dNOPAUSE -dPDFA=3 -dPDFACompatibilityPolicy=1 -sDEVICE=pdfwrite" 
                         " -sColorConversionStrategy=RGB -sOutputFile=%s \"%s\" > /dev/null 2>/dev/null",
                         output_file, file_path
             );
