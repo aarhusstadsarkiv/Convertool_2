@@ -1,7 +1,7 @@
 #include "convert.h"
 #include <string.h>
 #include <stdio.h>
-
+#include "lib/paths/paths.h"
 int main(int argc, const char *argv[])
 {   
     char db_path[200];
@@ -10,8 +10,12 @@ int main(int argc, const char *argv[])
 
     strcpy(db_path, argv[1]);
     strcpy(outdir, argv[2]);
-    strcpy(root_path, argv[3]);
 
+    get_parent_path(root_path, db_path, strlen(db_path));
+    get_parent_path(root_path, root_path, strlen(root_path));
+    strcat(root_path, "/");
+    
+    
     /*ConverterMap maps[10];
     strcpy(maps[0].puid, "fmt/45");
     strcpy(maps[0].converter, "libre");
