@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "lib/paths/paths.h"
+
 int main(int argc, const char *argv[])
 {   
     char db_path[200];
