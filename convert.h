@@ -15,4 +15,6 @@ typedef struct ConvertArgs{
 
 int get_archivefile_entries(sqlite3 *db, ArchiveFile *files, int max, char* sql_query);
 
+int compare_puids(char *puid, char *puids[], size_t puids_length);
+
 int convert(ConvertArgs *args);
