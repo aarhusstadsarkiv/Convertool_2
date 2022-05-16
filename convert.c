@@ -9,6 +9,7 @@
 // Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
+int convert_sequential(FILE *fp, ConvertArgs *args);
 
 void format_string(char * file_path){
     size_t file_path_length = strlen(file_path);
@@ -21,14 +22,12 @@ void format_string(char * file_path){
 }
 int convert(ConvertArgs *args){
     
-    char file_path_buffer[300];
+    
     char log_file_path[300];
     sprintf(log_file_path, "%s/log.txt", args->outdir);
 
     FILE *fp = fopen(log_file_path, "w");
     
-    size_t root_data_path_length = strlen(args->root_data_path);
-
     // Open database:
     sqlite3 *db;
     int error_flag = sqlite3_open(args->db_path, &db);
@@ -54,90 +53,38 @@ int convert(ConvertArgs *args){
     size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
 
     args->files = malloc(sizeof(ArchiveFile)*args->file_count);
-    char * query_get_non_converted_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', 'fmt/276', 'fmt/19', 'fmt/20')"
-                                            " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
-
-    char * query_get_pdfs = "SELECT * FROM Files WHERE Files.puid in ('fmt/18', 'fmt/276', 'fmt/19', 'fmt/20');";
-
-    char * query_get_non_converted_word_files = "SELECT * FROM Files WHERE Files.puid in ('fmt/40', 'fmt/412')"
-                                            " AND Files.uuid not in (Select uuid From _ConvertedFiles);";
     
-    char * query_get_non_converted_files =  "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', "
-                                            "'fmt/276', 'fmt/19', 'fmt/20', 'fmt/40', 'fmt/412', 'fmt/61', 'fmt/214', "
-                                            "'fmt/126', 'fmt/609', 'fmt/215', 'fmt/39', 'fmt/445')"
-                                            " AND Files.uuid not in (SELECT uuid FROM _ConvertedFiles);";
+    char * query;
+    if(args->thread_count == 1)
+        query = QUERY_GET_NON_CONVERTED_WORD_FILES;
+        
+    else if(args->thread_count > 1){
+        query = QUERY_GET_NON_CONVERTED_PDFS;
+    }
 
-    get_archivefile_entries(db, args->files, args->file_count, query_get_non_converted_files);
+    else{
+        printf("Need at least 1 thread to run the program.\n");
+        exit(1);
+    }
     
+    get_archivefile_entries(db, args->files, args->file_count, query);
     sqlite3_close(db);
 
     printf("Finished parsing all the archive files. Starting conversion to PDFA.\n");
     
-    int count = 0;
-
-    // Buffers
-    char out_dir[300];
-    char destination_folder[200];
-
-
-    for (size_t i = 0; i < args->file_count; i++)
-    {
-        // Clear the file_path_buffer.
-        memset(file_path_buffer, 0, strlen(file_path_buffer));
-        
-        memset(out_dir, 0, 300);
-        memset(destination_folder, 0, 200);
-
-        // Create the path root + relative_path.
-        insert_combined_path(file_path_buffer, args->root_data_path, args->files[i].relative_path);
-       
-        /* 
-            Format the file_path and get the destination folder.
-            Destination folder is equal to the parent of the relative path.
-        */
-
-        format_string(args->files[i].relative_path);
-        size_t relative_path_length = strlen(args->files[i].relative_path);
-
-        if(relative_path_length < 5){
-            printf(" No more files to convert\n");
-            exit(1);
-        }
-
-        get_parent_path(destination_folder, args->files[i].relative_path,
-                        relative_path_length);
-
-        
-        strcpy(out_dir, args->outdir);
-        strcat(out_dir, destination_folder);
-
-        make_output_dir(out_dir);
-        
-        char * puid = args->files[i].puid;
-        
-        if(compare_puids(puid, pdf_puids, pdf_puids_length))
-            convert_to_pdf_a(args->files[i].relative_path, out_dir, args->root_data_path);
-        
-        else if(compare_puids(puid, libre_puids, libre_puids_length)){
-            libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_PDF);
-
-            // If the file is also an excel file, we convert it to ods alongside the generated pdf.
-            if(compare_puids(puid, excel_puids, excel_puids_length))
-                libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_ODS);
-        }
-        
-        // Log to the file.
-        fprintf(fp, "%s\n", args->files[i].uuid); 
-        count++;
-        if((count % 500) == 0){
-            printf("Converted %d files.\n", count);    
-        }
+    if(args->thread_count == 1){
+        convert_sequential(fp, args);
     }
 
+    else{
+        // Run multithreaded conversion.
+    }
+    
+    
     fclose(fp);
     free(args->files);
 
-    return 0;
+    
 }
 
    int get_archivefile_entries(sqlite3 *db, ArchiveFile *files, int max, char sql_query []) {
@@ -145,10 +92,10 @@ int convert(ConvertArgs *args){
     sqlite3_stmt *stmt = NULL;
     int rc = 0;
     int i = 0;
-
+    
     rc = sqlite3_prepare_v2(
         db, sql_query,
-        -1, &stmt, NULL);
+       -1, &stmt, NULL);
 
     if (rc != SQLITE_OK) {
         fprintf(stderr, "Failed to prepare SQL: %s\n", sqlite3_errmsg(db));
@@ -262,4 +209,79 @@ int compare_puids(char *puid, char *puids[], size_t puids_length){
     // If the puid is not in the array, we return false.
     return 0;
     
+}
+
+int convert_sequential(FILE *fp, ConvertArgs *args){
+    int count = 0; 
+
+    // Buffers
+    char file_path_buffer[300];
+    char out_dir[300];
+    char destination_folder[200];
+
+     // libre_puids
+    char *libre_puids[] = {
+                            "fmt/40", "fmt/412", "fmt/61", "fmt/214",
+                            "fmt/126", "fmt/609", "fmt/215", "fmt/39", "fmt/445"
+                        };
+
+    // excel puids
+    char *excel_puids[] = {"fmt/214", "fmt/445"};
+
+    size_t libre_puids_length = sizeof(libre_puids) / sizeof(char *);
+    size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
+
+    for (size_t i = 0; i < args->file_count; i++)
+    {
+        // Clear the file_path_buffer.
+        memset(file_path_buffer, 0, strlen(file_path_buffer));
+        
+        memset(out_dir, 0, 300);
+        memset(destination_folder, 0, 200);
+
+        // Create the path root + relative_path.
+        insert_combined_path(file_path_buffer, args->root_data_path, args->files[i].relative_path);
+       
+        /* 
+            Format the file_path and get the destination folder.
+            Destination folder is equal to the parent of the relative path.
+        */
+
+        format_string(args->files[i].relative_path);
+        size_t relative_path_length = strlen(args->files[i].relative_path);
+
+        if(relative_path_length < 5){
+            printf(" No more files to convert\n");
+            exit(0);
+        }
+
+        get_parent_path(destination_folder, args->files[i].relative_path,
+                        relative_path_length);
+
+        
+        strcpy(out_dir, args->outdir);
+        strcat(out_dir, destination_folder);
+
+        make_output_dir(out_dir);
+        
+        char * puid = args->files[i].puid;
+        
+       
+        if(compare_puids(puid, libre_puids, libre_puids_length)){
+            libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_PDF);
+
+            // If the file is also an excel file, we convert it to ods alongside the generated pdf.
+            if(compare_puids(puid, excel_puids, excel_puids_length))
+                libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_ODS);
+        }
+        
+        // Log to the file.
+        fprintf(fp, "%s\n", args->files[i].uuid); 
+        count++;
+        if((count % 500) == 0){
+            printf("Converted %d files.\n", count);    
+        }
+    }
+
+    return 0;
 }
