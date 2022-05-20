@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include "lib/paths/paths.h"
+#include "lib/ThreadPool/mythreads.h"
 #include "pdf_converter/pdf_converter.h"
 #include "libre_converter/libre_converter.h"
 
@@ -10,6 +11,7 @@
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
 int convert_sequential(FILE *fp, ConvertArgs *args);
+void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[]);
 
 void format_string(char * file_path){
     size_t file_path_length = strlen(file_path);
@@ -77,9 +79,56 @@ int convert(ConvertArgs *args){
     }
 
     else{
+        
         // Run multithreaded conversion.
+        ThreadPool *pool = mt_create_pool(args->thread_count);
+        
+        // converter arguments.
+        ARGSPDF *pdf_args = malloc(sizeof(ARGSPDF) * args->file_count);
+
+        // Buffers
+        char file_path_buffer[300];
+        char out_dir[300];
+        char destination_folder[200];
+        
+
+        for (size_t i = 0; i < args->file_count; i++)
+        {
+        
+            /* Extract all the code from line 100 to 128 to a seperate function
+                such that it can also be used in convert_sequential.
+            */
+           
+            // Clear the file_path_buffer.
+            memset(file_path_buffer, 0, strlen(file_path_buffer));
+            memset(out_dir, 0, 300);
+            memset(destination_folder, 0, 200);
+
+            // Create the path root + relative_path.
+            insert_combined_path(file_path_buffer, args->root_data_path, args->files[i].relative_path);
+        
+            /* 
+                Format the file_path and get the destination folder.
+                Destination folder is equal to the parent of the relative path.
+            */
+
+            format_string(args->files[i].relative_path);
+            
+            // Create output dir.
+            // TODO: Use this function in convert sequential also.
+            create_output_dir(args->files[i].relative_path, destination_folder, out_dir, args->outdir);
+
+            //ARGSPDF pdf_args = {.file= args->files[i].relative_path, .outdir = out_dir, .root_path = args->root_data_path};    
+            strcpy(pdf_args[i].file, args->files[i].relative_path);
+            strcpy(pdf_args[i].outdir, out_dir);
+            strcpy(pdf_args[i].root_path, args);
+
+            mt_add_job(pool, &convert_to_pdf_a, (void *) &pdf_args[i]);
+        }
+
+        mt_join(pool);
+        
     }
-    
     
     fclose(fp);
     free(args->files);
@@ -117,7 +166,7 @@ int convert(ConvertArgs *args){
         // TODO: Move this block of code to a seperate function.
         //memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
         //memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
-        
+        file->id = sqlite3_column_text(stmt, 0);
         strcpy(file->uuid, sqlite3_column_text(stmt, 1));
         strcpy(file->relative_path, sqlite3_column_text(stmt, 2));
         strcpy(file->puid, sqlite3_column_text(stmt, 4));
@@ -285,3 +334,17 @@ int convert_sequential(FILE *fp, ConvertArgs *args){
 
     return 0;
 }
+
+void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[]){
+    size_t relative_path_length = strlen(relative_path);
+
+    get_parent_path(destination_buffer, relative_path,
+                    relative_path_length);
+
+    
+    strcpy(out_dir, root_out_dir);
+    strcat(out_dir, destination_buffer);
+
+    make_output_dir(out_dir);
+}
+

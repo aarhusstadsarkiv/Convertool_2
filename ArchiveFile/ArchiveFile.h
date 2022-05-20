@@ -1,4 +1,5 @@
 typedef struct ArchiveFile{
+    int id;
     char uuid[36];
     char checksum[64];
     char relative_path[200];

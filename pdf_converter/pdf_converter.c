@@ -4,9 +4,10 @@
 #include "pdf_converter.h"
 
 
-void convert_to_pdf_a(char* file, char* outdir, char* root_path){
-    char * output_file = get_combined_path(outdir, "1.pdf");    
-    char * file_path = get_combined_path(root_path, file);
+void convert_to_pdf_a(void *args){
+    ARGSPDF *pdf_args = (ARGSPDF*) args;
+    char * output_file = get_combined_path(pdf_args->outdir, "1.pdf");    
+    char * file_path = get_combined_path(pdf_args->root_path, pdf_args->file);
 
     char cmd[1000];
     snprintf(cmd, 1000, "gs -dBATCH -dNOPAUSE -dPDFA=3 -dPDFACompatibilityPolicy=1 -sDEVICE=pdfwrite" 

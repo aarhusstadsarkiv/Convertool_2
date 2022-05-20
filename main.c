@@ -9,8 +9,6 @@ int setup_converted_files(char *db_path);
 int main(int argc, const char *argv[])
 {   
 
-
-
     char db_path[200];
     char outdir [200];
     char root_path[200];
