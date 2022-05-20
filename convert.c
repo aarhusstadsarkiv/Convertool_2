@@ -10,8 +10,9 @@
 // Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
-int convert_sequential(FILE *fp, ConvertArgs *args);
+int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db);
 void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[]);
+void update_db(ArchiveFile *converted_file, sqlite3 *db);
 
 void format_string(char * file_path){
     size_t file_path_length = strlen(file_path);
@@ -22,6 +23,7 @@ void format_string(char * file_path){
             }   
         }
 }
+
 int convert(ConvertArgs *args){
     
     
@@ -70,12 +72,13 @@ int convert(ConvertArgs *args){
     }
     
     get_archivefile_entries(db, args->files, args->file_count, query);
-    sqlite3_close(db);
-
+   
     printf("Finished parsing all the archive files. Starting conversion to PDFA.\n");
     
     if(args->thread_count == 1){
-        convert_sequential(fp, args);
+        convert_sequential(fp, args, db);
+         sqlite3_close(db);
+
     }
 
     else{
@@ -118,10 +121,9 @@ int convert(ConvertArgs *args){
             // TODO: Use this function in convert sequential also.
             create_output_dir(args->files[i].relative_path, destination_folder, out_dir, args->outdir);
 
-            //ARGSPDF pdf_args = {.file= args->files[i].relative_path, .outdir = out_dir, .root_path = args->root_data_path};    
             strcpy(pdf_args[i].file, args->files[i].relative_path);
             strcpy(pdf_args[i].outdir, out_dir);
-            strcpy(pdf_args[i].root_path, args);
+            strcpy(pdf_args[i].root_path, args->root_data_path);
 
             mt_add_job(pool, &convert_to_pdf_a, (void *) &pdf_args[i]);
         }
@@ -166,7 +168,7 @@ int convert(ConvertArgs *args){
         // TODO: Move this block of code to a seperate function.
         //memcpy(file->uuid, sqlite3_column_text(stmt, 1), sizeof(file->uuid));
         //memcpy(file->relative_path, sqlite3_column_text(stmt, 2), sizeof(file->relative_path));
-        file->id = sqlite3_column_text(stmt, 0);
+        file->id = strtol(sqlite3_column_text(stmt, 0), NULL, 10);
         strcpy(file->uuid, sqlite3_column_text(stmt, 1));
         strcpy(file->relative_path, sqlite3_column_text(stmt, 2));
         strcpy(file->puid, sqlite3_column_text(stmt, 4));
@@ -189,55 +191,7 @@ int convert(ConvertArgs *args){
     return 0; 
 }
 
-char** get_converted_files(sqlite3 *db, int max, int *uuid_list_size, int *rows){
 
-    sqlite3_stmt *stmt = NULL;
-    int rc = 0;
-    int i = 0;
-    int uuid_string_size = 100; 
-    char **uuids = malloc(sizeof(char*) * 200);
-    
-    rc = sqlite3_prepare_v2(
-        db, "SELECT uuid from _ConvertedFiles",
-        -1, &stmt, NULL);
-
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "Failed to prepare SQL: %s\n", sqlite3_errmsg(db));
-        return NULL; 
-    }
-
-    while(i < max){
-        rc = sqlite3_step(stmt);
-        if (rc == SQLITE_DONE) {
-            printf("No more rows ...\n");
-            break;
-        } else if (rc != SQLITE_ROW) {
-            fprintf(stderr, "Problem: %s\n", sqlite3_errmsg(db)); 
-            sqlite3_finalize(stmt);
-            return NULL;
-        }
-
-        if (i > (*uuid_list_size)){
-           // Realloc uuids.
-            void *temp = realloc(uuids, (*uuid_list_size)+10000);
-            if(temp != NULL){
-                uuids = (char **) temp;
-                *(uuid_list_size)+=10000;
-            }
-
-           
-        }
-
-        uuids[i] = malloc(sizeof(char)*uuid_string_size);
-        strcpy(uuids[i], sqlite3_column_text(stmt, 0));
-        (*rows)++;
-        i++;
-        
-    }
-
-    sqlite3_finalize(stmt);
-    return uuids;
-}
 
 void dealloc_uuids(char ** uuids, int row_count){
     for (int i = 0; i < row_count; i++)
@@ -260,7 +214,7 @@ int compare_puids(char *puid, char *puids[], size_t puids_length){
     
 }
 
-int convert_sequential(FILE *fp, ConvertArgs *args){
+int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
     int count = 0; 
 
     // Buffers
@@ -325,7 +279,8 @@ int convert_sequential(FILE *fp, ConvertArgs *args){
         }
         
         // Log to the file.
-        fprintf(fp, "%s\n", args->files[i].uuid); 
+        //fprintf(fp, "%s\n", args->files[i].uuid);
+        update_db(&args->files[i], db); 
         count++;
         if((count % 500) == 0){
             printf("Converted %d files.\n", count);    
@@ -348,3 +303,82 @@ void create_output_dir(char relative_path[], char destination_buffer[], char out
     make_output_dir(out_dir);
 }
 
+void update_db(ArchiveFile *converted_file, sqlite3 *db){
+    sqlite3_stmt *stmt = NULL;
+    int rc = 0;
+    char sql_query[200];
+    
+    // Build the sql query.
+    snprintf(sql_query, 200, "INSERT INTO _ConvertedFiles VALUES (%ld, \"%s\")", converted_file->id, converted_file->uuid);
+    
+    rc = sqlite3_prepare_v2(
+        db, sql_query,
+       -1, &stmt, NULL);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare SQL: %s\n", sqlite3_errmsg(db)); 
+    }
+
+    rc = sqlite3_step(stmt);
+
+    if (rc != SQLITE_DONE) {
+        // Database update error handling.
+    }
+
+    sqlite3_finalize(stmt);
+}
+
+
+
+
+
+/* NOT CURRENTLY USED FUNCTIONS*/
+
+char** get_converted_files(sqlite3 *db, int max, int *uuid_list_size, int *rows){
+
+    sqlite3_stmt *stmt = NULL;
+    int rc = 0;
+    int i = 0;
+    int uuid_string_size = 100; 
+    char **uuids = malloc(sizeof(char*) * 200);
+    
+    rc = sqlite3_prepare_v2(
+        db, "SELECT uuid from _ConvertedFiles",
+        -1, &stmt, NULL);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare SQL: %s\n", sqlite3_errmsg(db));
+        return NULL; 
+    }
+
+    while(i < max){
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_DONE) {
+            printf("No more rows ...\n");
+            break;
+        } else if (rc != SQLITE_ROW) {
+            fprintf(stderr, "Problem: %s\n", sqlite3_errmsg(db)); 
+            sqlite3_finalize(stmt);
+            return NULL;
+        }
+
+        if (i > (*uuid_list_size)){
+           // Realloc uuids.
+            void *temp = realloc(uuids, (*uuid_list_size)+10000);
+            if(temp != NULL){
+                uuids = (char **) temp;
+                *(uuid_list_size)+=10000;
+            }
+
+        }
+
+        uuids[i] = malloc(sizeof(char)*uuid_string_size);
+        strcpy(uuids[i], sqlite3_column_text(stmt, 0));
+        (*rows)++;
+        i++;
+        
+    }
+
+    sqlite3_finalize(stmt);
+    return uuids;
+}

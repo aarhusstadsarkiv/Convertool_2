@@ -56,8 +56,8 @@ void make_output_dir(char* outdir){
         return_code = mkdir(parent_path, (S_IREAD | S_IWRITE));
         
         if(return_code == -1){
-            printf("Could not create %s\n", parent_path);
-            perror("Could not create the parent path: ");
+            printf("Could not create the parent path %s with error:\n", parent_path);
+            perror("Error: ");
         }
         /* 
             If we could create the docCollection folder,
