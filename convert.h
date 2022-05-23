@@ -8,7 +8,8 @@
 #define QUERY_GET_NON_CONVERTED_PDFS "SELECT * FROM Files WHERE Files.puid in ('fmt/16', 'fmt/17', 'fmt/18', 'fmt/276', 'fmt/19', 'fmt/20')"\
                                       " AND Files.uuid not in (Select uuid From _ConvertedFiles);"
 
-#define QUERY_GET_NON_CONVERTED_WORD_FILES "SELECT * FROM Files WHERE Files.puid in ('fmt/40', 'fmt/412')"\
+#define QUERY_GET_NON_CONVERTED_WORD_FILES "SELECT * FROM Files WHERE Files.puid in ('fmt/40', 'fmt/412', 'fmt/61', 'fmt/214', "\
+                                            "'fmt/126', 'fmt/609', 'fmt/215', 'fmt/39', 'fmt/445')"\
                                             " AND Files.uuid not in (Select uuid From _ConvertedFiles);"
 
 typedef struct ConvertArgs{

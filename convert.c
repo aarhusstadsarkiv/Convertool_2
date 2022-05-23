@@ -42,19 +42,6 @@ int convert(ConvertArgs *args){
     // pdf_puids
     char *pdf_puids[] = {"fmt/16", "fmt/17", "fmt/18", "fmt/276", "fmt/19", "fmt/20"};
 
-    // libre_puids
-    char *libre_puids[] = {
-                            "fmt/40", "fmt/412", "fmt/61", "fmt/214",
-                            "fmt/126", "fmt/609", "fmt/215", "fmt/39", "fmt/445"
-                        };
-
-    // excel puids
-    char *excel_puids[] = {"fmt/214", "fmt/445"};
-
-    size_t pdf_puids_length = sizeof(pdf_puids) / sizeof(char *);
-    size_t libre_puids_length = sizeof(libre_puids) / sizeof(char *);
-    size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
-
     args->files = malloc(sizeof(ArchiveFile)*args->file_count);
     
     char * query;
