@@ -11,8 +11,7 @@
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
 int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db);
-void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[]);
-void update_db(ArchiveFile *converted_file, sqlite3 *db);
+void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[], size_t relative_path_length);
 
 void format_string(char * file_path){
     size_t file_path_length = strlen(file_path);
@@ -93,6 +92,11 @@ int convert(ConvertArgs *args){
         char file_path_buffer[300];
         char out_dir[300];
         char destination_folder[200];
+
+        // db_update mutex
+
+        pthread_mutex_t db_update_mutex;
+        pthread_mutex_init(&db_update_mutex, NULL);
         
 
         for (size_t i = 0; i < args->file_count; i++)
@@ -119,13 +123,26 @@ int convert(ConvertArgs *args){
             
             // Create output dir.
             // TODO: Use this function in convert sequential also.
-            create_output_dir(args->files[i].relative_path, destination_folder, out_dir, args->outdir);
-
-            strcpy(pdf_args[i].file, args->files[i].relative_path);
-            strcpy(pdf_args[i].outdir, out_dir);
-            strcpy(pdf_args[i].root_path, args->root_data_path);
-
-            mt_add_job(pool, &convert_to_pdf_a, (void *) &pdf_args[i]);
+            // TODO Replace this if check with something smarter.
+            /* 
+                We can calculate the length of relative_path here and pass it to create_output_dir,
+                If it is larger than 0.
+                Currently we calculate it twice (once in the if statement and once in create_output_dir)
+            */
+            size_t relative_path_length = strlen(args->files[i].relative_path);
+            if(relative_path_length > 5){
+                create_output_dir(args->files[i].relative_path, destination_folder, out_dir, args->outdir, relative_path_length);
+                
+                pdf_args[i].archive_file = &args->files[i];
+                strcpy(pdf_args[i].outdir, out_dir);
+                pdf_args[i].root_path = args->root_data_path;
+                pdf_args[i].db = db;
+                pdf_args[i].db_update_mutex = &db_update_mutex;
+                mt_add_job(pool, &convert_to_pdf_a, (void *) &pdf_args[i]);
+            }
+            else
+                break;
+            
         }
 
         mt_join(pool);
@@ -134,7 +151,8 @@ int convert(ConvertArgs *args){
     
     fclose(fp);
     free(args->files);
-
+    
+    sqlite3_close(db);
     
 }
 
@@ -290,8 +308,7 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
     return 0;
 }
 
-void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[]){
-    size_t relative_path_length = strlen(relative_path);
+void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[], size_t relative_path_length){
 
     get_parent_path(destination_buffer, relative_path,
                     relative_path_length);
@@ -302,34 +319,6 @@ void create_output_dir(char relative_path[], char destination_buffer[], char out
 
     make_output_dir(out_dir);
 }
-
-void update_db(ArchiveFile *converted_file, sqlite3 *db){
-    sqlite3_stmt *stmt = NULL;
-    int rc = 0;
-    char sql_query[200];
-    
-    // Build the sql query.
-    snprintf(sql_query, 200, "INSERT INTO _ConvertedFiles VALUES (%ld, \"%s\")", converted_file->id, converted_file->uuid);
-    
-    rc = sqlite3_prepare_v2(
-        db, sql_query,
-       -1, &stmt, NULL);
-
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "Failed to prepare SQL: %s\n", sqlite3_errmsg(db)); 
-    }
-
-    rc = sqlite3_step(stmt);
-
-    if (rc != SQLITE_DONE) {
-        // Database update error handling.
-    }
-
-    sqlite3_finalize(stmt);
-}
-
-
-
 
 
 /* NOT CURRENTLY USED FUNCTIONS*/

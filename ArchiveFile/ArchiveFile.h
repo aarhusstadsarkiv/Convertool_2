@@ -1,3 +1,7 @@
+#ifndef ARCHIVEFILE_H
+#define ARCHIVEFILE_H
+#include <sqlite3.h>
+
 typedef struct ArchiveFile{
     long id;
     char uuid[36];
@@ -10,3 +14,7 @@ typedef struct ArchiveFile{
     //char signature[50];
     //char warning [100];
 } ArchiveFile;
+
+void update_db(ArchiveFile *converted_file, sqlite3 *db);
+
+#endif
