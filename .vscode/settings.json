@@ -1,8 +1,0 @@
-{
-    "files.associations": {
-        "archivefile.h": "c",
-        "string.h": "c",
-        "paths.h": "c",
-        "libre_converter.h": "c"
-    }
-}

@@ -28,7 +28,7 @@ char* insert_combined_path(char *buffer, char *root, char *to_append){
     size_t root_length =  strlen(root);
     memcpy(buffer, root, root_length);
     buffer[root_length] = '/';
-    buffer[root_length] = '\0';
+    buffer[root_length+1] = '\0';
     
     strcat(buffer, to_append);
 }
@@ -46,18 +46,18 @@ void get_parent_path(char* buffer, char* original_path, size_t length){
 }
 
 void make_output_dir(char* outdir){
-    int return_code = mkdir(outdir, (S_IREAD | S_IWRITE));
+    int return_code = mkdir(outdir, S_IRWXU);
     if(return_code == -1){
-        printf("%s\n", outdir);
-        perror("Could not create outdir: ");
+        //printf("%s\n", outdir);
+        //perror("Could not create outdir: ");
         // Try to make the docCollection folder, since it might not exist.
         char parent_path[500];
         get_parent_path(parent_path, outdir, strlen(outdir));
-        return_code = mkdir(parent_path, (S_IREAD | S_IWRITE));
+        return_code = mkdir(parent_path, S_IRWXU);
         
         if(return_code == -1){
-            printf("Could not create the parent path %s with error:\n", parent_path);
-            perror("Error: ");
+            //printf("Could not create the parent path %s with error:\n", parent_path);
+            //perror("Error: ");
         }
         /* 
             If we could create the docCollection folder,
@@ -65,7 +65,7 @@ void make_output_dir(char* outdir){
         */
        
         else{
-            return_code = mkdir(outdir, (S_IREAD | S_IWRITE));
+            return_code = mkdir(outdir, S_IRWXU);
             if(return_code == -1){
                 perror("Could not create the output directory: ");
             }

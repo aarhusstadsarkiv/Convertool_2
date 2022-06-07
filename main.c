@@ -9,6 +9,12 @@ int setup_converted_files(char *db_path);
 int main(int argc, const char *argv[])
 {   
 
+
+    if(strcmp(argv[1], "--help") == 0){
+        printf("Run with ./Convertool {db_path} {outdir} {thread_count} {file_count}\n");
+        return 0;
+    }
+    
     char db_path[200];
     char outdir [200];
     char root_path[200];
