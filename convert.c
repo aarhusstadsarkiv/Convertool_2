@@ -2,10 +2,12 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <unistd.h>
 #include "lib/paths/paths.h"
 #include "lib/ThreadPool/mythreads.h"
 #include "pdf_converter/pdf_converter.h"
 #include "libre_converter/libre_converter.h"
+#include <pthread.h>
 
 // Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
@@ -220,7 +222,12 @@ int compare_puids(char *puid, char *puids[], size_t puids_length){
 }
 
 int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
+    pthread_mutex_t converting = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t done = PTHREAD_COND_INITIALIZER;
     int count = 0; 
+
+    pthread_t tid;
+    int error;
 
     // Buffers
     char file_path_buffer[300];
@@ -238,7 +245,8 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
 
     size_t libre_puids_length = sizeof(libre_puids) / sizeof(char *);
     size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
-
+    pthread_cond_t done = PTHREAD_COND_INITIALIZER;
+    
     for (size_t i = 0; i < args->file_count; i++)
     {
         // Clear the file_path_buffer.
@@ -276,11 +284,19 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
         
        
         if(compare_puids(puid, libre_puids, libre_puids_length)){
-            libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_PDF);
+            LibreArgs libre_args = {.file = args->files[i].relative_path, .outdir = out_dir, .root_path = args->root_data_path,
+             .format_specifier = FORMAT_PDF, .done=&done};
+
+            pthread_mutex_lock(&converting);
+            pthread_create(&tid, NULL, libre_convert, (void* ) &libre_args);
+            error = pthread_cond_timedwait()
+          
 
             // If the file is also an excel file, we convert it to ods alongside the generated pdf.
-            if(compare_puids(puid, excel_puids, excel_puids_length))
-                libre_convert(args->files[i].relative_path, out_dir, args->root_data_path, FORMAT_ODS);
+            if(compare_puids(puid, excel_puids, excel_puids_length)){
+                libre_args.format_specifier = FORMAT_ODS;
+                libre_convert((void* ) &libre_args);
+            }
         }
         
         // Log to the file.
