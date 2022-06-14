@@ -31,9 +31,6 @@ void *libre_convert(void *libre_args){
         format = "pdf";
         break;
     }
-
-    char escaped_file_path[400];
-    snprintf(escaped_file_path, 400, "\"%s\"", file_path);
     
     char cmd[500];
 
@@ -41,7 +38,7 @@ void *libre_convert(void *libre_args){
             format, file_path, args->outdir, '\0');
 
     free(file_path);
-    system(cmd);
+    system(cmd);   
     pthread_cond_signal(args->done);
     
     return NULL;

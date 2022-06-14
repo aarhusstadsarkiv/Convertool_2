@@ -293,22 +293,24 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db, struct timespec
             LibreArgs libre_args = {.file = args->files[i].relative_path, .outdir = out_dir, .root_path = args->root_data_path,
              .format_specifier = FORMAT_PDF, .done=&done};
 
-            pthread_mutex_lock(&converting);
 
             /* pthread cond_timedwait expects an absolute time to wait until */
             clock_gettime(CLOCK_REALTIME, &threshold_time);
             threshold_time.tv_sec += max_wait->tv_sec;
             threshold_time.tv_nsec += max_wait->tv_nsec;
-
-            pthread_create(&tid, NULL, libre_convert, (void* ) &libre_args);
-            error = pthread_cond_timedwait(&done, &converting, &threshold_time);
             
+            pthread_mutex_lock(&converting);
+                pthread_create(&tid, NULL, libre_convert, (void* ) &libre_args);
+                error = pthread_cond_timedwait(&done, &converting, &threshold_time);
+            pthread_mutex_unlock(&converting);
+
             if (error == ETIMEDOUT){
                 fprintf(stderr, "Convertion of file %s timed out.\n",  args->files[i].relative_path);
+                printf("threshold_time: %ld\n", threshold_time.tv_sec);
+                pthread_cancel(tid);
                 continue;
             }
-            if (!error)
-                pthread_mutex_unlock(&converting);
+           
           
             // If the file is also an excel file, we convert it to ods alongside the generated pdf.
             if(compare_puids(puid, excel_puids, excel_puids_length)){
