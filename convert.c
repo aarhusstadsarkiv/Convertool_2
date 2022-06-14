@@ -8,11 +8,12 @@
 #include "pdf_converter/pdf_converter.h"
 #include "libre_converter/libre_converter.h"
 #include <pthread.h>
+#include <errno.h>
 
 // Function prototypes.
 char** get_converted_files(sqlite3 *db, int max, int* uuid_list_size, int *rows);
 void dealloc_uuids(char ** uuids, int row_count);
-int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db);
+int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db, struct timespec *max_wait);
 void create_output_dir(char relative_path[], char destination_buffer[], char out_dir[], char root_out_dir[], size_t relative_path_length);
 
 void format_string(char * file_path){
@@ -64,8 +65,14 @@ int convert(ConvertArgs *args){
     printf("Finished parsing all the archive files. Starting conversion to PDFA.\n");
     
     if(args->thread_count == 1){
-        convert_sequential(fp, args, db);
-         sqlite3_close(db);
+        struct timespec max_wait;
+        memset(&max_wait, 0, sizeof(max_wait));
+
+        /* wait at most 5 seconds */
+        max_wait.tv_sec = 5;
+        
+        convert_sequential(fp, args, db, &max_wait);
+        sqlite3_close(db);
 
     }
 
@@ -199,7 +206,6 @@ int convert(ConvertArgs *args){
 }
 
 
-
 void dealloc_uuids(char ** uuids, int row_count){
     for (int i = 0; i < row_count; i++)
     {
@@ -221,9 +227,10 @@ int compare_puids(char *puid, char *puids[], size_t puids_length){
     
 }
 
-int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
+int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db, struct timespec *max_wait){
     pthread_mutex_t converting = PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_t done = PTHREAD_COND_INITIALIZER;
+    struct timespec threshold_time;
     int count = 0; 
 
     pthread_t tid;
@@ -245,7 +252,6 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
 
     size_t libre_puids_length = sizeof(libre_puids) / sizeof(char *);
     size_t excel_puids_length = sizeof(excel_puids) / sizeof(char *);
-    pthread_cond_t done = PTHREAD_COND_INITIALIZER;
     
     for (size_t i = 0; i < args->file_count; i++)
     {
@@ -267,7 +273,7 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
         size_t relative_path_length = strlen(args->files[i].relative_path);
 
         if(relative_path_length < 5){
-            printf(" No more files to convert\n");
+            printf("No more files to convert\n");
             exit(0);
         }
 
@@ -288,10 +294,22 @@ int convert_sequential(FILE *fp, ConvertArgs *args, sqlite3 *db){
              .format_specifier = FORMAT_PDF, .done=&done};
 
             pthread_mutex_lock(&converting);
-            pthread_create(&tid, NULL, libre_convert, (void* ) &libre_args);
-            error = pthread_cond_timedwait()
-          
 
+            /* pthread cond_timedwait expects an absolute time to wait until */
+            clock_gettime(CLOCK_REALTIME, &threshold_time);
+            threshold_time.tv_sec += max_wait->tv_sec;
+            threshold_time.tv_nsec += max_wait->tv_nsec;
+
+            pthread_create(&tid, NULL, libre_convert, (void* ) &libre_args);
+            error = pthread_cond_timedwait(&done, &converting, &threshold_time);
+            
+            if (error == ETIMEDOUT){
+                fprintf(stderr, "Convertion of file %s timed out.\n",  args->files[i].relative_path);
+                continue;
+            }
+            if (!error)
+                pthread_mutex_unlock(&converting);
+          
             // If the file is also an excel file, we convert it to ods alongside the generated pdf.
             if(compare_puids(puid, excel_puids, excel_puids_length)){
                 libre_args.format_specifier = FORMAT_ODS;

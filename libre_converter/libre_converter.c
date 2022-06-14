@@ -34,13 +34,13 @@ void *libre_convert(void *libre_args){
 
     char escaped_file_path[400];
     snprintf(escaped_file_path, 400, "\"%s\"", file_path);
-    free(file_path);
     
     char cmd[500];
 
     snprintf(cmd, 500, "libreoffice --headless --convert-to %s \"%s\" --outdir %s > /dev/null 2>/dev/null%c", 
             format, file_path, args->outdir, '\0');
 
+    free(file_path);
     system(cmd);
     pthread_cond_signal(args->done);
     
